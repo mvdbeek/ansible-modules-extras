@@ -36,7 +36,7 @@ options:
   lv:
     description:
     - The name of the logical volume.
-    required: true
+    required: false
   size:
     description:
     - The size of the logical volume, according to lvcreate(8) --size, by
@@ -63,7 +63,6 @@ options:
     version_added: "2.0"
     description:
     - Free-form options to be passed to the lvcreate command
-<<<<<<< HEAD
   snapshot:
     version_added: "2.1"
     description:
@@ -73,14 +72,14 @@ options:
     version_added: "2.2"
     description:
     - Comma separated list of physical volumes e.g. /dev/sda,/dev/sdb
-=======
   thinpool:
+    version_added: "2.2"
     description:
-    - The thin pool volume name. When you want to create thinprovisioning volume, specify thin pool volume name.
->>>>>>> add functionality to create thin pool / volume on Linux LVM to lvol module
+    - The thin pool volume name. When you want to create a thin provisioned volume, specify a thin pool volume name.
     required: false
 notes:
   - Filesystems on top of the volume are not resized.
+  - You must specify lv (when managing the state of logical volumes) or thinpool (when managing a thin provisisoned volume).
 '''
 
 EXAMPLES = '''
@@ -120,16 +119,14 @@ EXAMPLES = '''
 # Remove the logical volume.
 - lvol: vg=firefly lv=test state=absent force=yes
 
-<<<<<<< HEAD
 # Create a snapshot volume of the test logical volume.
 - lvol: vg=firefly lv=test snapshot=snap1 size=100m
-=======
+
 # Create a thin pool of 512g.
 - lvol: vg=firefly thinpool=testpool size=512g
 
 # Create a thin volume of 128g.
 - lvol: vg=firefly lv=test thinpool=testpool size=128g
->>>>>>> add functionality to create thin pool / volume on Linux LVM to lvol module
 '''
 
 import re
@@ -182,14 +179,14 @@ def main():
             opts=dict(type='str'),
             state=dict(choices=["absent", "present"], default='present'),
             force=dict(type='bool', default='no'),
-<<<<<<< HEAD
             snapshot=dict(type='str', default=None),
-            pvs=dict(type='str')
-=======
+            pvs=dict(type='str'),
             thinpool=dict(type='str'),
->>>>>>> add functionality to create thin pool / volume on Linux LVM to lvol module
         ),
         supports_check_mode=True,
+        required_one_of=(
+            ['lv', 'thinpool'],
+        ),
     )
 
     # Determine if the "--yes" option should be used
@@ -284,27 +281,19 @@ def main():
 
     lvs = parse_lvs(current_lvs)
 
-<<<<<<< HEAD
-    if snapshot is None:
-        check_lv = lv
-    else:
-        check_lv = snapshot
-    for test_lv in lvs:
-        if test_lv['name'] == check_lv:
-=======
     if thinpool and lv:
         for test_lv in lvs:
             if test_lv['name'] == thinpool:
                 break
         else:
-            module.fail_json(msg="Thin poll %s does not exist." % thinpool)
+            module.fail_json(msg="Thin pool %s does not exist." % thinpool)
 
     if thinpool and not lv:
         target = thinpool
+    elif snapshot:
+        target = snapshot
     elif lv:
         target = lv
-    else:
-        module.fail_json(msg="lv param is required unless thinpool param is specified.")
 
     for test_lv in lvs:
         if test_lv['name'] == target:
@@ -329,8 +318,6 @@ def main():
                 lvcreate_cmd = module.get_bin_path("lvcreate", required=True)
                 if snapshot is not None:
                     cmd = "%s %s -%s %s%s -s -n %s %s %s/%s" % (lvcreate_cmd, yesopt, size_opt, size, size_unit, snapshot, opts, vg, lv)
-                else:
-                    cmd = "%s %s -n %s -%s %s%s %s %s %s" % (lvcreate_cmd, yesopt, lv, size_opt, size, size_unit, opts, vg, pvs)
                 if thinpool and lv:
                     if size_opt == 'l':
                        module.fail_json(changed=False, msg="Thin volume sizing with percentage not supported.")
@@ -340,7 +327,7 @@ def main():
                 elif thinpool and not lv:
                     cmd = "%s %s -%s %s%s %s -T %s/%s" % (lvcreate_cmd, yesopt, size_opt, size, size_unit, opts, vg, thinpool)
                 else:
-                    cmd = "%s %s -n %s -%s %s%s %s %s" % (lvcreate_cmd, yesopt, lv, size_opt, size, size_unit, opts, vg)
+                    cmd = "%s %s -n %s -%s %s%s %s %s %s" % (lvcreate_cmd, yesopt, lv, size_opt, size, size_unit, opts, vg, pvs)
                 rc, _, err = module.run_command(cmd)
                 if rc == 0:
                     changed = True
